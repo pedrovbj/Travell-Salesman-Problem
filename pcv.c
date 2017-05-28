@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
-//#include "mpi.h"
+#include "mpi.h"
 #include <pthread.h>
 #include <ctype.h>
 
@@ -49,12 +49,12 @@ int main(int argc, char const *argv[]) {
     numThreads = readNextInt(fd);
     order = readNextInt(fd);
 
-    printf("%d, %d, %d\n", numProc, numThreads, order);
+    //printf("%d, %d, %d\n", numProc, numThreads, order);
 
     /* Aloca a matriz de adjacencia */
-    adjMatrix = (int**) malloc(order*sizeof(int**));
+    adjMatrix = (int**) malloc(order*sizeof(int*));
     for (i = 0; i < order; i++) {
-        adjMatrix[i] = (int*) malloc(order*sizeof(int*));
+        adjMatrix[i] = (int*) malloc(order*sizeof(int));
     }
 
     /* Le matriz de adjacencia */
@@ -67,12 +67,12 @@ int main(int argc, char const *argv[]) {
     /* Fecha arquivo de entrada */
     fclose(fd);
 
-    // for (i = 0; i < order; i++) {
-    //     for (j = 0; j < order; j++) {
-    //         printf("%d ", adjMatrix[i][j]);
-    //     }
-    //     printf("\n");
-    // }
+    for (i = 0; i < order; i++) {
+        for (j = 0; j < order; j++) {
+            printf("%d ", adjMatrix[i][j]);
+        }
+        printf("\n");
+    }
 
     /* Desaloca a matriz de adjacencia */
     for (i = 0; i < order; i++) {
