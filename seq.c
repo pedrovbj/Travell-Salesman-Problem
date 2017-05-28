@@ -17,6 +17,7 @@ int pcv(int root, int current, circularArray* ca, int** g, linkedList* path) {
     linkedList* paths;
     int choosen = -1;
 
+    /* Caso base */
     if(ca->N == 1) {
         cost = getCost(current, ca->array[0], g) + getCost(ca->array[0], root, g);
         linkedListPush(root, path);
@@ -25,34 +26,32 @@ int pcv(int root, int current, circularArray* ca, int** g, linkedList* path) {
         return cost;
     }
 
+    /* Caso geral */
     copies = (circularArray*) malloc(ca->N*sizeof(circularArray));
     paths = (linkedList*) malloc(ca->N*sizeof(linkedList));
     for (i = 0; i < ca->N; i++) {
-        circularArrayNew(ca->N-1, &copies[i]);
         linkedListNew(&paths[i]);
         cc = circularArrayReplicate(ca, &copies[i]);
         costCandidate = getCost(current, cc, g) + pcv(root, cc, &copies[i], g, &paths[i]);
-        //linkedListPrint(&paths[i]);
         if (costCandidate < cost) {
             cost = costCandidate;
             choosen = i;
         }
     }
 
+    /* Concatena o caminho minimo da sub-arvore com o caminho total */
     linkedListCat(path, &paths[choosen]);
     linkedListPush(current, path);
 
+    /* Libera a memoria alocada */
     for (i = 0; i < ca->N; i++) {
-        if (i != choosen) {
-            linkedListDel(&paths[i]);
-        }
+        linkedListDel(&paths[i]);
     }
-
+    free(paths);
     for (i = 0; i < ca->N; i++) {
         circularArrayDel(&copies[i]);
     }
     free(copies);
-    free(paths);
     return cost;
 }
 
@@ -77,6 +76,7 @@ int main(int argc, char const *argv[]) {
     int             numProc;
     int             numThreads;
     int             i, j;
+    int             cost;
     circularArray   ca;
     linkedList      path;
 
@@ -103,8 +103,6 @@ int main(int argc, char const *argv[]) {
     numThreads = readNextInt(fd);
     order = readNextInt(fd);
 
-    //printf("%d, %d, %d\n", numProc, numThreads, order);
-
     /* Aloca a matriz de adjacencia */
     adjMatrix = (int**) malloc(order*sizeof(int**));
     for (i = 0; i < order; i++) {
@@ -121,12 +119,12 @@ int main(int argc, char const *argv[]) {
     /* Fecha arquivo de entrada */
     fclose(fd);
 
-    for (i = 0; i < order; i++) {
-        for (j = 0; j < order; j++) {
-            printf("%d ", adjMatrix[i][j]);
-        }
-        printf("\n");
-    }
+    // for (i = 0; i < order; i++) {
+    //     for (j = 0; j < order; j++) {
+    //         printf("%d ", adjMatrix[i][j]);
+    //     }
+    //     printf("\n");
+    // }
 
     /* Cria e inicializa lista circular */
     circularArrayNew(order-1, &ca);
@@ -135,15 +133,21 @@ int main(int argc, char const *argv[]) {
     /* Cria caminho */
     linkedListNew(&path);
 
+    /* Calcula custo e caminho minimo */
+    cost = pcv(0, 0, &ca, adjMatrix, &path);
+
     /* Imprime custo e caminho minimo */
-    printf("%d\n", pcv(0, 0, &ca, adjMatrix, &path));
+    printf("Caminho minimo: ");
     linkedListPrint(&path);
+    printf("Custo minimo: %d\n", cost);
 
     /* Desaloca a matriz de adjacencia */
     for (i = 0; i < order; i++) {
         free(adjMatrix[i]);
     }
     free(adjMatrix);
+    /* Desaloca lista circular e caminho */
     circularArrayDel(&ca);
+    linkedListDel(&path);
     exit(0);
 }

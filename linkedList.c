@@ -14,7 +14,7 @@ void linkedListDel(linkedList* l) {
 void linkedListPush(int a, linkedList* l) {
     node_t* node;
 
-    node = (node_t*) malloc(sizeof(node));
+    node = (node_t*) malloc(sizeof(node_t));
     node->elem = a;
     node->next = l->first;
     l->first = node;
@@ -63,7 +63,6 @@ void linkedListPrint(linkedList* l) {
     node_t* node;
 
     node = l->first;
-    printf("[");
     while (node) {
         printf("%d", node->elem);
         if(node->next) {
@@ -71,5 +70,5 @@ void linkedListPrint(linkedList* l) {
         }
         node = node->next;
     }
-    printf("]\n");
+    printf("\n");
 }
