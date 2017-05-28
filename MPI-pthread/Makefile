@@ -5,8 +5,6 @@ OBJS_MASTER := master.o
 OBJS_SLAVE := slave.o
 OBJS := $(OBJS_TADS) $(OBJS_MASTER) $(OBJS_SLAVE)
 
-x: clean all run
-
 all: master slave
 
 master: $(OBJS)
@@ -24,3 +22,8 @@ run:
 clean:
 	@- $(RM) $(NAME) slave
 	@- $(RM) $(OBJS)
+
+x:
+	make clean
+	make all
+	make run

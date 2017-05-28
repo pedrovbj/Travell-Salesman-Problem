@@ -4,7 +4,6 @@
 #include <limits.h>
 #include <pthread.h>
 #include "mpi.h"
-#include "circularArray.h"
 #include "linkedList.h"
 
 int getCost(int i, int j, int** g) {
@@ -15,35 +14,53 @@ int pcv(int root, int current, int** g, int order, linkedList* path,
         int numSlaves, int numThreads)
 {
     int tag = 1;
-    int cost;
     int myRank;
     int* array_of_errcodes;
     char slave[] = "./slave";
     MPI_Status status;
     MPI_Comm interComm;
-    circularArray ca;
-    int i;
 
-    /* Cria e inicializa lista circular */
-    circularArrayNew(order-1, &ca);
-    circularArrayInit(&ca);
+    int i;
+    int cost = INT_MAX;
+    struct {
+        int cost;
+        int id;
+    } candidate;
+    int choosen;
 
     /* Um por slave */
     array_of_errcodes = (int*) malloc(numSlaves*sizeof(int));
 
     MPI_Comm_rank(MPI_COMM_WORLD, &myRank);
 
+    /* Spawn slaves */
     MPI_Comm_spawn(slave, MPI_ARGV_NULL, numSlaves, MPI_INFO_NULL, 0,
         MPI_COMM_WORLD, &interComm, array_of_errcodes);
 
-    MPI_Send(&order, 1, MPI_INT, 0, tag, interComm);
+    /* Send root */
+    MPI_Send(&root, 1, MPI_INT, 0, tag, interComm);
+    /* Send order */
+    MPI_Send(&order, 1, MPI_INT, 0, tag++, interComm);
+    /* Envia matriz de adjacencia linha por linha, devido a alocacao dinamica */
     for (i = 0; i < order; i++) {
         MPI_Send(&g[i][0], order, MPI_INT, 0, tag++, interComm);
     }
 
-    circularArrayDel(&ca);
+    /* Escuta promiscuamente pelos custos calculados nos slaves e atualiza
+       o custo e o caminho minimo */
+    for (i = 0; i < numSlaves; i++) {
+        MPI_Recv(&candidate, 2, MPI_INT, MPI_ANY_SOURCE, MPI_ANY_TAG,
+            interComm, &status);
+        if (candidate.cost < cost) {
+            cost = candidate.cost;
+            choosen = candidate.id;
+        }
+    }
+
+    printf(">%d\n", choosen);
+
     free(array_of_errcodes);
-    return 0;
+    return cost;
 }
 
 int readNextInt(FILE* fd) {
@@ -129,7 +146,7 @@ int main(int argc, char **argv) {
     /* Imprime custo e caminho minimo */
     //printf("Caminho minimo: ");
     //linkedListPrint(&path);
-    //printf("Custo minimo: %d\n", cost);
+    printf("Custo minimo: %d\n", cost);
 
     /* Desaloca a matriz de adjacencia */
     for (i = 0; i < order; i++) {
