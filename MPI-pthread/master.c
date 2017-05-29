@@ -20,13 +20,10 @@ int pcv(int root, int current, int** g, int order, linkedList* path,
     MPI_Status status;
     MPI_Comm interComm;
 
-    int i;
+    int i, j;
     int cost = INT_MAX;
-    struct {
-        int cost;
-        int id;
-    } candidate;
-    int choosen;
+    int* buf;
+    int* pathArray;
 
     /* Um por slave */
     array_of_errcodes = (int*) malloc(numSlaves*sizeof(int));
@@ -46,20 +43,32 @@ int pcv(int root, int current, int** g, int order, linkedList* path,
         MPI_Send(&g[i][0], order, MPI_INT, 0, tag++, interComm);
     }
 
+    buf = (int*) malloc((order+1)*sizeof(int));
+    pathArray = (int*) malloc(order*sizeof(int));
+
     /* Escuta promiscuamente pelos custos calculados nos slaves e atualiza
        o custo e o caminho minimo */
-    for (i = 0; i < numSlaves; i++) {
-        MPI_Recv(&candidate, 2, MPI_INT, MPI_ANY_SOURCE, MPI_ANY_TAG,
+    for (i = 0; i < order-1; i++) {
+        MPI_Recv(buf, order+1, MPI_INT, MPI_ANY_SOURCE, MPI_ANY_TAG,
             interComm, &status);
-        if (candidate.cost < cost) {
-            cost = candidate.cost;
-            choosen = candidate.id;
+        //printf("%d\n", buf[0]);
+        if (buf[0] < cost) {
+            cost = buf[0];
+            for (j = 0; j < order; j++) {
+                pathArray[j] = buf[j+1];
+            }
         }
     }
 
-    printf(">%d\n", choosen);
+    cost += getCost(root, pathArray[0], g);
+    for (j = order-1; j >= 0; j--) {
+        linkedListPush(pathArray[j], path);
+    }
+    linkedListPush(root, path);
 
     free(array_of_errcodes);
+    free(buf);
+    free(pathArray);
     return cost;
 }
 
@@ -144,8 +153,8 @@ int main(int argc, char **argv) {
     cost = pcv(0, 0, adjMatrix, order, &path, numProc-1, numThreads);
 
     /* Imprime custo e caminho minimo */
-    //printf("Caminho minimo: ");
-    //linkedListPrint(&path);
+    printf("Caminho minimo: ");
+    linkedListPrint(&path);
     printf("Custo minimo: %d\n", cost);
 
     /* Desaloca a matriz de adjacencia */

@@ -9,6 +9,7 @@ typedef struct node_t {
 typedef struct {
     node_t* first;
     node_t* last;
+    int N;
 } linkedList;
 
 void linkedListNew(linkedList* l);
@@ -22,3 +23,5 @@ int linkedListIsEmpty(linkedList* l);
 void linkedListCat(linkedList* l1, linkedList* l2);
 
 void linkedListPrint(linkedList* l);
+
+int* linkedListToArray(linkedList* l);

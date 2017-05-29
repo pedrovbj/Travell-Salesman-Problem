@@ -3,6 +3,7 @@
 void linkedListNew(linkedList* l) {
     l->first = NULL;
     l->last = NULL;
+    l->N = 0;
 }
 
 void linkedListDel(linkedList* l) {
@@ -21,6 +22,7 @@ void linkedListPush(int a, linkedList* l) {
     if (l->last == NULL) {
         l->last = node;
     }
+    l->N++;
 }
 
 int linkedListPop(linkedList* l) {
@@ -40,6 +42,7 @@ int linkedListPop(linkedList* l) {
     if(l->first == NULL) {
         l->last = NULL;
     }
+    l->N--;
 
     return a;
 }
@@ -57,6 +60,7 @@ void linkedListCat(linkedList* l1, linkedList* l2) {
     l1->last = l2->last;
     l2->first = NULL;
     l2->last = NULL;
+    l1->N += l2->N;
 }
 
 void linkedListPrint(linkedList* l) {
@@ -71,4 +75,21 @@ void linkedListPrint(linkedList* l) {
         node = node->next;
     }
     printf("\n");
+}
+
+int* linkedListToArray(linkedList* l) {
+    int* array;
+    int i;
+    node_t* node;
+    array = (int*) malloc(l->N*sizeof(int));
+
+    i = 0;
+    node = l->first;
+    while (node) {
+        array[i] = node->elem;
+        node = node->next;
+        i++;
+    }
+
+    return array;
 }
