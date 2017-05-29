@@ -58,9 +58,9 @@ void linkedListCat(linkedList* l1, linkedList* l2) {
         l1->first = l2->first;
     }
     l1->last = l2->last;
-    l2->first = NULL;
-    l2->last = NULL;
     l1->N += l2->N;
+    /* This empties l2 */
+    linkedListNew(l2);
 }
 
 void linkedListPrint(linkedList* l) {
@@ -75,21 +75,4 @@ void linkedListPrint(linkedList* l) {
         node = node->next;
     }
     printf("\n");
-}
-
-int* linkedListToArray(linkedList* l) {
-    int* array;
-    int i;
-    node_t* node;
-    array = (int*) malloc(l->N*sizeof(int));
-
-    i = 0;
-    node = l->first;
-    while (node) {
-        array[i] = node->elem;
-        node = node->next;
-        i++;
-    }
-
-    return array;
 }

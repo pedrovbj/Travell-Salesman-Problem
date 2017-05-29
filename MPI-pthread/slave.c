@@ -1,46 +1,26 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <ctype.h>
-#include <limits.h>
-#include <pthread.h>
-#include "mpi.h"
-#include "circularArray.h"
-#include "linkedList.h"
-
-typedef struct task_t {
-    int current;
-    circularArray* ca;
-    struct task_t* next;
-} task_t;
-
-typedef struct {
-    int tid;
-    int root;
-    int* cost;
-    int* choosen;
-    pthread_mutex_t* lock;
-    task_t* tasklist;
-    void* pathCandidate;
-} threadArgs;
+#include "slave.h"
 
 /* Adj matrix */
 int** g;
 
-int getCost(int i, int j) {
-    return g[i][j] ? g[i][j] : INT_MAX;
-}
+/* Just because the specification says the use of conditional variables is
+   a __must__ */
+int finished = 0;
+pthread_mutex_t mutex;
+pthread_cond_t cond;
 
 int pcv_seq(int root, int current, circularArray* ca, linkedList* path) {
     int i;
     int cc;
-    int cost = INT_MAX, costCandidate;
-    circularArray* copies;
-    linkedList* paths;
-    int choosen = -1;
+    int cost = INT_MAX, costCandidate = 0;
+    circularArray* copies; /* copias da lista circular para cada filho */
+    linkedList* paths; /* caminhos de cada filho */
+    int choosen = -1; /* filho escolhido */
 
     /* Caso base */
     if(ca->N == 1) {
-        cost = getCost(current, ca->array[0]) + getCost(ca->array[0], root);
+        cost = getCost(current, ca->array[0], g);
+        updateCost(&cost, getCost(ca->array[0], root, g));
         linkedListPush(root, path);
         linkedListPush(ca->array[0], path);
         linkedListPush(current, path);
@@ -50,10 +30,13 @@ int pcv_seq(int root, int current, circularArray* ca, linkedList* path) {
     /* Caso geral */
     copies = (circularArray*) malloc(ca->N*sizeof(circularArray));
     paths = (linkedList*) malloc(ca->N*sizeof(linkedList));
+    /* Para cada filho na arvore de recursao, calcula seu custo e caminho */
     for (i = 0; i < ca->N; i++) {
         linkedListNew(&paths[i]);
         cc = circularArrayReplicate(ca, &copies[i]);
-        costCandidate = getCost(current, cc) + pcv_seq(root, cc, &copies[i], &paths[i]);
+        updateCost(&costCandidate, getCost(current, cc, g));
+        updateCost(&costCandidate, pcv_seq(root, cc, &copies[i], &paths[i]));
+        /* Atualiza custo minimo e caminho escolhido */
         if (costCandidate < cost) {
             cost = costCandidate;
             choosen = i;
@@ -85,41 +68,44 @@ void* pcv_thread(void* tArgs) {
 
     args = (threadArgs*) tArgs;
 
+    /* Retira e realiza as tarefas das lista */
     task = args->tasklist;
     while(task) {
         linkedListNew(&pathAux);
-        //seq int root, int current, circularArray* ca, linkedList* path
-        costCandidate = pcv_seq(args->root, task->current, task->ca, &pathAux);
-        //printf("<<%d, %d> %d>\n", args->tid, getpid(), costCandidate);
 
+        /* pcv sequencial */
+        costCandidate = pcv_seq(args->root, task->current, task->ca, &pathAux);
+
+        /* Atualiza o custo e qual o caminho escolhido */
         pthread_mutex_lock(args->lock);
-        //printf("<<%d, %d> %d LOCKED>\n", args->tid, getpid(), costCandidate);
         if(costCandidate < *args->cost) {
-            //printf("%d\n", *args->cost);
             *args->cost = costCandidate;
             *args->choosen = args->tid;
             linkedListDel((linkedList*)args->pathCandidate);
             linkedListNew((linkedList*)args->pathCandidate);
             linkedListCat((linkedList*)args->pathCandidate, &pathAux);
-            //linkedListPrint((linkedList*)pathCandidate);
         } else {
             linkedListDel(&pathAux);
         }
-        //printf("<<%d, %d> %d UNLOCKED>\n", args->tid, getpid(), costCandidate);
         pthread_mutex_unlock(args->lock);
 
-        // printf("<%d> %d, {", args->tid, task->current);
-        // int i;
-        // for (i = 0; i < task->ca->N; i++) {
-        //     printf("%d", task->ca->array[i]);
-        // }
-        // printf("}\n");
+        /* Guarda proxima tarefa */
         aux = task->next;
+
+        /* Clean up */
         circularArrayDel(task->ca);
         free(task->ca);
         free(task);
+
+        /* Avanca pra proxima tarefa */
         task = aux;
     }
+
+    /* Atualiza quantas threads terminaram e sinaliza a thread principal */
+    pthread_mutex_lock(&mutex);
+    finished++;
+    pthread_cond_signal(&cond);
+    pthread_mutex_unlock(& mutex);
 
     pthread_exit(NULL);
 }
@@ -137,18 +123,17 @@ int pcv(int root, int current, int order, circularArray* ca, linkedList* path,
     pthread_t* thread;
     threadArgs* tArgs;
 
-    // int a = 1;
-    // printf("<PID %d ready to attach>\n", getpid());
-    // while(a){
-    // }
-
-    //pthread_init();
+    /* Inicializacao dos mutex e variaveis de condicao */
     pthread_mutex_init(&lock, NULL);
+    pthread_mutex_init(&mutex, NULL);
+    pthread_cond_init(&cond, NULL);
+    /* Zero threads terminaram sua execucao */
+    finished = 0;
 
-    //Create array of threads
+    /* Cria array de threads */
     thread = (pthread_t*) malloc(numThreads*sizeof(pthread_t));
 
-    //Create array of thread args
+    /* Cria array de thread args */
     tArgs = (threadArgs*) malloc(numThreads*sizeof(threadArgs));
 
     /* Distribuicao de carga */
@@ -156,8 +141,9 @@ int pcv(int root, int current, int order, circularArray* ca, linkedList* path,
     nRem = (order-2) % numThreads;
 
     idx = 0;
-    k = 0;
+    k = 0; /* Indice de ca */
     for(i = 0; i < numThreads; i++) {
+        /* Atribui argumentos da thread */
         tArgs[i].tid = i;
         tArgs[i].cost = &cost;
         tArgs[i].choosen = &choosen;
@@ -165,19 +151,21 @@ int pcv(int root, int current, int order, circularArray* ca, linkedList* path,
         tArgs[i].lock = &lock;
         tArgs[i].pathCandidate = (void*) malloc(sizeof(linkedList));
         linkedListNew((linkedList*)tArgs[i].pathCandidate);
-        //Sets start point
+
+        /* Ponto inicial */
         beg = idx;
 
-        //Load balancing
+        /* Balanco de carga */
         if(i < nRem) {
             idx += nQuo+1;
         } else {
             idx += nQuo;
         }
 
-        //Sets end point
+        /* Ponto final */
         end = idx-1;
 
+        /* Cria tasklist e atribui a thread */
         tArgs[i].tasklist = NULL;
         for(j = beg; j <= end; j++) {
             task = (task_t*) malloc(sizeof(task_t));
@@ -197,11 +185,14 @@ int pcv(int root, int current, int order, circularArray* ca, linkedList* path,
         pthread_create(&thread[i], NULL, pcv_thread, (void*) &tArgs[i]);
     }
 
-    /* Join threads */
-    for (i = 0; i < numThreads; i++) {
-        pthread_join(thread[i], NULL);
+    /* Join threads, the hard way */
+    pthread_mutex_lock(&mutex);
+    while(finished < numThreads) {
+        pthread_cond_wait(&cond, &mutex);
     }
+    pthread_mutex_unlock(&mutex);
 
+    /* Atualiza melhor caminho */
     for (i = 0; i < numThreads; i++)
         if (i == choosen) {
         linkedListCat(path, tArgs[i].pathCandidate);
@@ -210,11 +201,16 @@ int pcv(int root, int current, int order, circularArray* ca, linkedList* path,
         free(tArgs[i].pathCandidate);
     }
 
-    cost += getCost(current, path->first->elem);
+    /* Atualiza custo */
+    updateCost(&cost, getCost(current, path->first->elem, g));
+
+    /* Inclui no atual no caminho */
     linkedListPush(current, path);
 
+    /* Clean up */
     free(thread);
     free(tArgs);
+
     return cost;
 }
 
@@ -225,7 +221,6 @@ int main(int argc, char **argv) {
     int nQuo, nRem;
     int beg, end;
     int numThreads;
-
     int current;
     int order;
     int root;
@@ -235,7 +230,6 @@ int main(int argc, char **argv) {
     int* buf;
     circularArray ca, caAux;
     linkedList path;
-
     MPI_Status status;
     MPI_Comm interComm;
 
@@ -245,49 +239,33 @@ int main(int argc, char **argv) {
 
     MPI_Comm_get_parent(&interComm);
 
-    printf("<Slave (%d) PID %d>\n", myRank, getpid());
-
     if (myRank == 0) {
+        /* Recebe root, numero de threads e ordem da matriz de adj */
         MPI_Recv(&root, 1, MPI_INT, 0, tag, interComm, &status);
         MPI_Recv(&numThreads, 1, MPI_INT, 0, tag++, interComm, &status);
         MPI_Recv(&order, 1, MPI_INT, 0, tag++, interComm, &status);
-        g = (int**) malloc(order*sizeof(int**));
-        for (i = 0; i < order; i++) {
-            g[i] = (int*) malloc(order*sizeof(int*));
-        }
+        /* Aloca matriz de adj */
+        allocateAdjMatrix(order, &g);
+        /* Recebe linhas da matriz */
         for (i = 0; i < order; i++) {
             MPI_Recv(&g[i][0], order, MPI_INT, 0, tag++, interComm, &status);
         }
-        // for (i = 0; i < order; i++) {
-        //     for (j = 0; j < order; j++) {
-        //         printf("%d ", g[i][j]);
-        //     }
-        //     printf("\n");
-        // }
     }
 
+    /* Broadcasting do root, numThreads e order */
     MPI_Bcast(&root, 1, MPI_INT, 0, MPI_COMM_WORLD);
     MPI_Bcast(&numThreads, 1, MPI_INT, 0, MPI_COMM_WORLD);
     MPI_Bcast(&order, 1, MPI_INT, 0, MPI_COMM_WORLD);
-    //printf("<%d, %d, %d>\n", order, numThreads, myRank);
 
+    /* Outros processos alocam a matriz */
     if (myRank != 0) {
-        g = (int**) malloc(order*sizeof(int**));
-        for (i = 0; i < order; i++) {
-            g[i] = (int*) malloc(order*sizeof(int*));
-        }
+        allocateAdjMatrix(order, &g);
     }
 
+    /* Broadcasting da matriz */
     for (i = 0; i < order; i++) {
         MPI_Bcast(&g[i][0], order, MPI_INT, 0, MPI_COMM_WORLD);
     }
-
-    // for (i = 0; i < order; i++) {
-    //     for (j = 0; j < order; j++) {
-    //         printf("%d ", g[i][j]);
-    //     }
-    //     printf("\n");
-    // }
 
     /* Distribuicao de carga */
     nQuo = (order-1) / numProc;
@@ -301,12 +279,11 @@ int main(int argc, char **argv) {
         end = (myRank+1)*nQuo+nRem-1;
     }
 
-    //printf("<%d> %d, %d\n", myRank, beg, end);
-
     /* Cria e inicializa lista circular auxiliar */
     circularArrayNew(order-1, &caAux);
     circularArrayInit(&caAux);
 
+    /* Aloca buffer para enviar candidatos a custo minimo e melhor caminho */
     buf = (int*) malloc((order+1)*sizeof(int));
 
     /* pcv para cada sub-arvore atribuida ao processo */
@@ -317,13 +294,11 @@ int main(int argc, char **argv) {
         /* Cria e inicializa lista circular */
         caAux.index = i;
         current = circularArrayReplicate(&caAux, &ca);
-        // printf("<%d>curr=%d\n", myRank, current);
-        // for (j = 0; j < order-2; j++)
-        //     printf("<%d>%d; ", myRank, ca.array[j]);
-        // puts("");
 
+        /* Calcula candidato a custo minimo */
         costCandidate = pcv(root, current, order, &ca, &path, numThreads);
 
+        /* Preenche buffer de envio*/
         buf[0] = costCandidate;
         node = path.first;
         j = 1;
@@ -332,9 +307,8 @@ int main(int argc, char **argv) {
             node = node->next;
             j++;
         }
-        // for (j = 0; j < order+1; j++)
-        //      printf("<%d>%d,%d\n", myRank, buf[j], j);
-        // puts("");
+
+        /* Envia buffer ao master*/
         MPI_Send(buf, order+1, MPI_INT, 0, tag, interComm);
 
         /* Destroi lista circular */
@@ -343,14 +317,12 @@ int main(int argc, char **argv) {
         linkedListDel(&path);
     }
 
-    /* Desaloca a matriz de adjacencia */
-    for (i = 0; i < order; i++) {
-        free(g[i]);
-    }
-    free(g);
-
+    /* Clean up */
+    freeAdjMatrix(order, g);
     free(buf);
     circularArrayDel(&caAux);
+
+    /* Finaliza MPI */
     MPI_Finalize();
     exit(0);
 }

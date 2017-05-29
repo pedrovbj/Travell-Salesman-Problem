@@ -1,14 +1,4 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <ctype.h>
-#include <limits.h>
-#include <pthread.h>
-#include "mpi.h"
-#include "linkedList.h"
-
-int getCost(int i, int j, int** g) {
-    return (g[i][j]) ? g[i][j] : INT_MAX;
-}
+#include "master.h"
 
 int pcv(int root, int current, int** g, int order, linkedList* path,
         int numSlaves, int numThreads)
@@ -16,16 +6,17 @@ int pcv(int root, int current, int** g, int order, linkedList* path,
     int tag = 1;
     int myRank;
     int* array_of_errcodes;
+    /* Tem que ser './slave' porque eh a localizacao do executavel
+       que o MPI_Comm_spawn ira utilizar. Simplesmente 'slave' nao roda.*/
     char slave[] = "./slave";
     MPI_Status status;
     MPI_Comm interComm;
-
     int i, j;
     int cost = INT_MAX;
-    int* buf;
-    int* pathArray;
+    int* buf; /* Buffer para receber candidatos a custo e caminho minimo */
+    int* pathArray; /* Melhor caminho ate agora */
 
-    /* Um por slave */
+    /* Um codigo de erro por slave */
     array_of_errcodes = (int*) malloc(numSlaves*sizeof(int));
 
     MPI_Comm_rank(MPI_COMM_WORLD, &myRank);
@@ -45,6 +36,7 @@ int pcv(int root, int current, int** g, int order, linkedList* path,
         MPI_Send(&g[i][0], order, MPI_INT, 0, tag++, interComm);
     }
 
+    /* Aloca buffer e pathArray */
     buf = (int*) malloc((order+1)*sizeof(int));
     pathArray = (int*) malloc(order*sizeof(int));
 
@@ -53,22 +45,31 @@ int pcv(int root, int current, int** g, int order, linkedList* path,
     for (i = 0; i < order-1; i++) {
         MPI_Recv(buf, order+1, MPI_INT, MPI_ANY_SOURCE, MPI_ANY_TAG,
             interComm, &status);
-        //printf("%d\n", buf[0]);
+
+        /* buf[0] contem o custo e o restante do buf o caminho */
         if (buf[0] < cost) {
+            /* Atualiza custo minimo */
             cost = buf[0];
+            /* Atualiza melhor caminho */
             for (j = 0; j < order; j++) {
                 pathArray[j] = buf[j+1];
             }
         }
     }
 
-    cost += getCost(root, pathArray[0], g);
+    /* Acresce o custo de se ir do no raiz ate o primeiro no
+       do caminho escolhido */
+    updateCost(&cost, getCost(root, pathArray[0], g));
 
+    /* Insere os elementos com o caminho escolhido na lista encadeada
+       de retorno */
     for (j = order-1; j >= 0; j--) {
         linkedListPush(pathArray[j], path);
     }
+    /* Insere raiz no caminho */
     linkedListPush(root, path);
 
+    /* Clean up */
     free(array_of_errcodes);
     free(buf);
     free(pathArray);
@@ -76,17 +77,13 @@ int pcv(int root, int current, int** g, int order, linkedList* path,
 }
 
 int readNextInt(FILE* fd) {
-    int c;
+    int aux;
+    char buffer[20];
 
-    c = fgetc(fd);
-    while(c != EOF) {
-        if (isdigit(c)) {
-            /* converte ascii para digito */
-            return c-'0';
-        }
-        c = fgetc(fd);
-    }
-    return -1;
+    fgets(buffer, sizeof(buffer), fd);
+    sscanf(buffer, "%d%*s", &aux);
+
+    return aux;
 }
 
 int main(int argc, char **argv) {
@@ -140,15 +137,6 @@ int main(int argc, char **argv) {
 
     /* Inicializa o MPI*/
     MPI_Init(&argc, &argv);
-    printf("<Master PID %d>\n", getpid());
-
-    // for (i = 0; i < order; i++) {
-    //     for (j = 0; j < order; j++) {
-    //         printf("%d ", adjMatrix[i][j]);
-    //     }
-    //     printf("\n");
-    // }
-
 
     /* Cria caminho */
     linkedListNew(&path);

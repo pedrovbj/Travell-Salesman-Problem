@@ -12,16 +12,23 @@ typedef struct {
     int N;
 } linkedList;
 
+/* Constructor */
 void linkedListNew(linkedList* l);
+
+/* Destructor */
 void linkedListDel(linkedList* l);
 
+/* Pushes the element 'a' into the list's head */
 void linkedListPush(int a, linkedList* l);
+
+/* Pops out the first element in the list */
 int linkedListPop(linkedList* l);
+
+/* Returns True if the list is empty and False otherwise */
 int linkedListIsEmpty(linkedList* l);
 
-/* Destroys l2 */
+/* Concatenates the tail of l1 with the head of l2, but __empties l2__ */
 void linkedListCat(linkedList* l1, linkedList* l2);
 
+/* Prints list to stdout */
 void linkedListPrint(linkedList* l);
-
-int* linkedListToArray(linkedList* l);
