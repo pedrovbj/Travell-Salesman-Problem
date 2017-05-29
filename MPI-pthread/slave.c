@@ -7,11 +7,28 @@
 #include "circularArray.h"
 #include "linkedList.h"
 
-int getCost(int i, int j, int** g) {
-    return (g[i][j]) ? g[i][j] : INT_MAX;
+typedef struct task_t {
+    int current;
+    circularArray* ca;
+    struct task_t* next;
+} task_t;
+
+typedef struct {
+    int tid;
+    int root;
+    linkedList* path;
+    int* cost;
+    task_t* tasklist;
+} threadArgs;
+
+/* Adj matrix */
+int** g;
+
+int getCost(int i, int j) {
+    return g[i][j] ? g[i][j] : INT_MAX;
 }
 
-int pcv(int root, int current, circularArray* ca, int** g, linkedList* path) {
+int pcv_seq(int root, int current, circularArray* ca, linkedList* path) {
     int i;
     int cc;
     int cost = INT_MAX, costCandidate;
@@ -21,7 +38,7 @@ int pcv(int root, int current, circularArray* ca, int** g, linkedList* path) {
 
     /* Caso base */
     if(ca->N == 1) {
-        cost = getCost(current, ca->array[0], g) + getCost(ca->array[0], root, g);
+        cost = getCost(current, ca->array[0]) + getCost(ca->array[0], root);
         linkedListPush(root, path);
         linkedListPush(ca->array[0], path);
         linkedListPush(current, path);
@@ -34,7 +51,7 @@ int pcv(int root, int current, circularArray* ca, int** g, linkedList* path) {
     for (i = 0; i < ca->N; i++) {
         linkedListNew(&paths[i]);
         cc = circularArrayReplicate(ca, &copies[i]);
-        costCandidate = getCost(current, cc, g) + pcv(root, cc, &copies[i], g, &paths[i]);
+        costCandidate = getCost(current, cc) + pcv_seq(root, cc, &copies[i], &paths[i]);
         if (costCandidate < cost) {
             cost = costCandidate;
             choosen = i;
@@ -57,17 +74,112 @@ int pcv(int root, int current, circularArray* ca, int** g, linkedList* path) {
     return cost;
 }
 
+void* pcv_thread(void* tArgs) {
+    threadArgs* args;
+    task_t* task;
+    task_t* aux;
+    int costCandidate;
+
+    args = (threadArgs*) tArgs;
+
+    task = args->tasklist;
+    while(task) {
+        //seq
+
+        // printf("<%d> %d, {", args->tid, task->current);
+        // int i;
+        // for (i = 0; i < task->ca->N; i++) {
+        //     printf("%d", task->ca->array[i]);
+        // }
+        // printf("}\n");
+        aux = task->next;
+        circularArrayDel(task->ca);
+        free(task->ca);
+        free(task);
+        task = aux;
+    }
+
+    pthread_exit(NULL);
+}
+
+int pcv(int root, int current, int order, circularArray* ca, linkedList* path,
+        int numThreads)
+{
+    int nQuo, nRem;
+    int beg, end;
+    int cost;
+    int i, j, k, idx;
+    task_t* task;
+    pthread_t* thread;
+    threadArgs* tArgs;
+
+    //Create array of threads
+    thread = (pthread_t*) malloc(numThreads*sizeof(pthread_t));
+
+    //Create array of thread args
+    tArgs = (threadArgs*) malloc(numThreads*sizeof(threadArgs));
+
+    /* Distribuicao de carga */
+    nQuo = (order-2) / numThreads;
+    nRem = (order-2) % numThreads;
+
+    idx = 0;
+    k = 0;
+    for(i = 0; i < numThreads; i++) {
+        tArgs[i].tid = i;
+
+        //Sets start point
+        beg = idx;
+
+        //Load balancing
+        if(i < nRem) {
+            idx += nQuo+1;
+        } else {
+            idx += nQuo;
+        }
+
+        //Sets end point
+        end = idx-1;
+
+        tArgs[i].tasklist = NULL;
+        for(j = beg; j <= end; j++) {
+            task = (task_t*) malloc(sizeof(task_t));
+
+            task->ca = (circularArray*) malloc(sizeof(circularArray));
+            circularArrayNew(ca->N-1, task->ca);
+            ca->index = k;
+            task->current = circularArrayReplicate(ca, task->ca);
+            k++;
+
+            task->next = tArgs[i].tasklist;
+            tArgs[i].tasklist = task;
+        }
+
+        /* Criacao das threads */
+        pthread_create(&thread[i], NULL, pcv_thread, (void*) &tArgs[i]);
+    }
+
+    /* Join threads */
+    for (i = 0; i < numThreads; i++) {
+        pthread_join(thread[i], NULL);
+    }
+
+    free(thread);
+    free(tArgs);
+    return cost;
+}
+
 int main(int argc, char **argv) {
     int tag = 1;
     int myRank;
     int numProc;
     int nQuo, nRem;
     int beg, end;
+    int numThreads;
 
     int current;
     int order;
     int root;
-    int** g;
     int i, j;
     node_t* node;
     int costCandidate;
@@ -86,6 +198,7 @@ int main(int argc, char **argv) {
 
     if (myRank == 0) {
         MPI_Recv(&root, 1, MPI_INT, 0, tag, interComm, &status);
+        MPI_Recv(&numThreads, 1, MPI_INT, 0, tag++, interComm, &status);
         MPI_Recv(&order, 1, MPI_INT, 0, tag++, interComm, &status);
         g = (int**) malloc(order*sizeof(int**));
         for (i = 0; i < order; i++) {
@@ -103,8 +216,9 @@ int main(int argc, char **argv) {
     }
 
     MPI_Bcast(&root, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    MPI_Bcast(&numThreads, 1, MPI_INT, 0, MPI_COMM_WORLD);
     MPI_Bcast(&order, 1, MPI_INT, 0, MPI_COMM_WORLD);
-    // printf("%d, %d\n", order, myRank);
+    //printf("<%d, %d, %d>\n", order, numThreads, myRank);
 
     if (myRank != 0) {
         g = (int**) malloc(order*sizeof(int**));
@@ -124,7 +238,7 @@ int main(int argc, char **argv) {
     //     printf("\n");
     // }
 
-    /* Distribuicao de  carga */
+    /* Distribuicao de carga */
     nQuo = (order-1) / numProc;
     nRem = (order-1) % numProc;
 
@@ -157,7 +271,7 @@ int main(int argc, char **argv) {
         //     printf("<%d>%d; ", myRank, ca.array[j]);
         // puts("");
 
-        costCandidate = pcv(root, current, &ca, g, &path);
+        costCandidate = pcv(root, current, order, &ca, &path, numThreads);
 
         buf[0] = costCandidate;
         node = path.first;
@@ -183,7 +297,7 @@ int main(int argc, char **argv) {
         free(g[i]);
     }
     free(g);
-    
+
     free(buf);
     circularArrayDel(&caAux);
     MPI_Finalize();

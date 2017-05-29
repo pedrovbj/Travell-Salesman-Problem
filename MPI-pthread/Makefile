@@ -8,13 +8,13 @@ OBJS := $(OBJS_TADS) $(OBJS_MASTER) $(OBJS_SLAVE)
 all: master slave
 
 master: $(OBJS)
-	mpicc -Wall -g $(OBJS_MASTER) $(OBJS_TADS) -o $(NAME)
+	mpicc -pthread -Wall -g $(OBJS_MASTER) $(OBJS_TADS) -o $(NAME)
 
 slave: $(OBJS)
-	mpicc -Wall -g $(OBJS_SLAVE) $(OBJS_TADS) -o slave
+	mpicc -pthread -Wall -g $(OBJS_SLAVE) $(OBJS_TADS) -o slave
 
 $(OBJS):
-	mpicc -c -Wall -g $(SRCS)
+	mpicc -pthread -c -Wall -g $(SRCS)
 
 run:
 	mpirun -np 1 ./$(NAME) file.in

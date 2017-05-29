@@ -36,6 +36,8 @@ int pcv(int root, int current, int** g, int order, linkedList* path,
 
     /* Send root */
     MPI_Send(&root, 1, MPI_INT, 0, tag, interComm);
+    /* Send number of threads */
+    MPI_Send(&numThreads, 1, MPI_INT, 0, tag++, interComm);
     /* Send order */
     MPI_Send(&order, 1, MPI_INT, 0, tag++, interComm);
     /* Envia matriz de adjacencia linha por linha, devido a alocacao dinamica */
