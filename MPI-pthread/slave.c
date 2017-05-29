@@ -80,13 +80,19 @@ void* pcv_thread(void* tArgs) {
     task_t* task;
     task_t* aux;
     int costCandidate;
+    void* pathCandidate;
+    linkedList pathAux;
 
     args = (threadArgs*) tArgs;
 
+    pathCandidate = (void*) malloc(sizeof(linkedList));
+    linkedListNew((linkedList*)pathCandidate);
+
     task = args->tasklist;
     while(task) {
+        linkedListNew(&pathAux);
         //seq int root, int current, circularArray* ca, linkedList* path
-        costCandidate = pcv_seq(args->root, task->current, task->ca, &task->path);
+        costCandidate = pcv_seq(args->root, task->current, task->ca, &pathAux);
         //printf("<<%d, %d> %d>\n", args->tid, getpid(), costCandidate);
 
         pthread_mutex_lock(args->lock);
@@ -95,6 +101,12 @@ void* pcv_thread(void* tArgs) {
             //printf("%d\n", *args->cost);
             *args->cost = costCandidate;
             *args->choosen = args->tid;
+            linkedListDel((linkedList*)pathCandidate);
+            linkedListNew((linkedList*)pathCandidate);
+            linkedListCat((linkedList*)pathCandidate, &pathAux);
+            //linkedListPrint((linkedList*)pathCandidate);
+        } else {
+            linkedListDel(&pathAux);
         }
         //printf("<<%d, %d> %d UNLOCKED>\n", args->tid, getpid(), costCandidate);
         pthread_mutex_unlock(args->lock);
@@ -112,7 +124,7 @@ void* pcv_thread(void* tArgs) {
         task = aux;
     }
 
-    pthread_exit(NULL);
+    pthread_exit(pathCandidate);
 }
 
 int pcv(int root, int current, int order, circularArray* ca, linkedList* path,
@@ -191,14 +203,21 @@ int pcv(int root, int current, int order, circularArray* ca, linkedList* path,
     /* Join threads */
     for (i = 0; i < numThreads; i++) {
         pthread_join(thread[i], &choosenPath);
+        //linkedListPrint(choosenPath);
         if (choosen == i) {
-            linkedListPush(curret, path);
-            linkedListCat(path, (linkedList*) choosenPath));
+            //printf("<PID %d> choosen = %d\n", getpid(), choosen);
+            linkedListCat(path, choosenPath);
+            //linkedListPrint(path);
         } else {
-            linkedListDel((linkedList*) choosenPath);
+            linkedListDel(choosenPath);
+            free(choosenPath);
         }
     }
+
+    //printf("<PID %d, cost = %d, current=%d, path->first->elem= %d>\n", getpid(), cost,current, path->first->elem);
     cost += getCost(current, path->first->elem);
+    //printf("<PID %d, cost after = %d>\n", getpid(), cost);
+    linkedListPush(current, path);
 
     free(thread);
     free(tArgs);

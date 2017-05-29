@@ -62,12 +62,12 @@ int pcv(int root, int current, int** g, int order, linkedList* path,
         }
     }
 
-    //cost += getCost(root, pathArray[0], g);
+    cost += getCost(root, pathArray[0], g);
 
-    // for (j = order-1; j >= 0; j--) {
-    //     linkedListPush(pathArray[j], path);
-    // }
-    // linkedListPush(root, path);
+    for (j = order-1; j >= 0; j--) {
+        linkedListPush(pathArray[j], path);
+    }
+    linkedListPush(root, path);
 
     free(array_of_errcodes);
     free(buf);
@@ -157,8 +157,8 @@ int main(int argc, char **argv) {
     cost = pcv(0, 0, adjMatrix, order, &path, numProc-1, numThreads);
 
     /* Imprime custo e caminho minimo */
-    // printf("Caminho minimo: ");
-    // linkedListPrint(&path);
+    printf("Caminho minimo: ");
+    linkedListPrint(&path);
     printf("Custo minimo: %d\n", cost);
 
     /* Desaloca a matriz de adjacencia */
