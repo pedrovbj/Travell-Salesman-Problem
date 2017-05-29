@@ -20,6 +20,7 @@ typedef struct {
     int* choosen;
     pthread_mutex_t* lock;
     task_t* tasklist;
+    void* pathCandidate;
 } threadArgs;
 
 /* Adj matrix */
@@ -80,13 +81,9 @@ void* pcv_thread(void* tArgs) {
     task_t* task;
     task_t* aux;
     int costCandidate;
-    void* pathCandidate;
     linkedList pathAux;
 
     args = (threadArgs*) tArgs;
-
-    pathCandidate = (void*) malloc(sizeof(linkedList));
-    linkedListNew((linkedList*)pathCandidate);
 
     task = args->tasklist;
     while(task) {
@@ -101,9 +98,9 @@ void* pcv_thread(void* tArgs) {
             //printf("%d\n", *args->cost);
             *args->cost = costCandidate;
             *args->choosen = args->tid;
-            linkedListDel((linkedList*)pathCandidate);
-            linkedListNew((linkedList*)pathCandidate);
-            linkedListCat((linkedList*)pathCandidate, &pathAux);
+            linkedListDel((linkedList*)args->pathCandidate);
+            linkedListNew((linkedList*)args->pathCandidate);
+            linkedListCat((linkedList*)args->pathCandidate, &pathAux);
             //linkedListPrint((linkedList*)pathCandidate);
         } else {
             linkedListDel(&pathAux);
@@ -124,7 +121,7 @@ void* pcv_thread(void* tArgs) {
         task = aux;
     }
 
-    pthread_exit(pathCandidate);
+    pthread_exit(NULL);
 }
 
 int pcv(int root, int current, int order, circularArray* ca, linkedList* path,
@@ -135,7 +132,6 @@ int pcv(int root, int current, int order, circularArray* ca, linkedList* path,
     pthread_mutex_t lock;
     int cost = INT_MAX;
     int choosen = -1;
-    void* choosenPath;
     int i, j, k, idx;
     task_t* task;
     pthread_t* thread;
@@ -167,6 +163,8 @@ int pcv(int root, int current, int order, circularArray* ca, linkedList* path,
         tArgs[i].choosen = &choosen;
         tArgs[i].root = root;
         tArgs[i].lock = &lock;
+        tArgs[i].pathCandidate = (void*) malloc(sizeof(linkedList));
+        linkedListNew((linkedList*)tArgs[i].pathCandidate);
         //Sets start point
         beg = idx;
 
@@ -182,7 +180,6 @@ int pcv(int root, int current, int order, circularArray* ca, linkedList* path,
 
         tArgs[i].tasklist = NULL;
         for(j = beg; j <= end; j++) {
-            //printf("<%d><%d, %d>\n", getpid(), beg, end);
             task = (task_t*) malloc(sizeof(task_t));
 
             task->ca = (circularArray*) malloc(sizeof(circularArray));
@@ -202,21 +199,18 @@ int pcv(int root, int current, int order, circularArray* ca, linkedList* path,
 
     /* Join threads */
     for (i = 0; i < numThreads; i++) {
-        pthread_join(thread[i], &choosenPath);
-        //linkedListPrint(choosenPath);
-        if (choosen == i) {
-            //printf("<PID %d> choosen = %d\n", getpid(), choosen);
-            linkedListCat(path, choosenPath);
-            //linkedListPrint(path);
-        } else {
-            linkedListDel(choosenPath);
-            free(choosenPath);
-        }
+        pthread_join(thread[i], NULL);
     }
 
-    //printf("<PID %d, cost = %d, current=%d, path->first->elem= %d>\n", getpid(), cost,current, path->first->elem);
+    for (i = 0; i < numThreads; i++)
+        if (i == choosen) {
+        linkedListCat(path, tArgs[i].pathCandidate);
+    } else {
+        linkedListDel(tArgs[i].pathCandidate);
+        free(tArgs[i].pathCandidate);
+    }
+
     cost += getCost(current, path->first->elem);
-    //printf("<PID %d, cost after = %d>\n", getpid(), cost);
     linkedListPush(current, path);
 
     free(thread);
