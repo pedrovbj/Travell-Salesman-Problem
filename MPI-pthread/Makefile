@@ -1,3 +1,18 @@
+ #********************************************************
+ #* INSTITUTO DE CIENCIAS MATEMATICAS E DE COMPUTACAO DA *
+ #* UNIVERSIDADE DE SAO PAULO (ICMC-USP)                 *
+ #*                                                      *
+ #* Avaliacao Bimestral AB1 (26/05 a 29/05 de 2017)      *
+ #* Programacao Concorrente (SSC0742)                    *
+ #*                                                      *
+ #* Professor Paulo Sergio Lopes de Souza                *
+ #*                                                      *
+ #* Aluno Pedro Virgilio Basilio Jeronymo (8910559)      *
+ #*                                                      *
+ #********************************************************
+ #* Problema do Caixeiro Viajante                        *
+ #********************************************************
+
 NAME := pcv
 SRCS := $(wildcard *.c)
 OBJS_TADS := circularArray.o linkedList.o adjMatrix.o
