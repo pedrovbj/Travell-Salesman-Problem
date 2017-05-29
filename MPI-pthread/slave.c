@@ -16,8 +16,9 @@ typedef struct task_t {
 typedef struct {
     int tid;
     int root;
-    linkedList* path;
     int* cost;
+    int* choosen;
+    pthread_mutex_t* lock;
     task_t* tasklist;
 } threadArgs;
 
@@ -84,7 +85,19 @@ void* pcv_thread(void* tArgs) {
 
     task = args->tasklist;
     while(task) {
-        //seq
+        //seq int root, int current, circularArray* ca, linkedList* path
+        costCandidate = pcv_seq(args->root, task->current, task->ca, &task->path);
+        //printf("<<%d, %d> %d>\n", args->tid, getpid(), costCandidate);
+
+        pthread_mutex_lock(args->lock);
+        //printf("<<%d, %d> %d LOCKED>\n", args->tid, getpid(), costCandidate);
+        if(costCandidate < *args->cost) {
+            //printf("%d\n", *args->cost);
+            *args->cost = costCandidate;
+            *args->choosen = args->tid;
+        }
+        //printf("<<%d, %d> %d UNLOCKED>\n", args->tid, getpid(), costCandidate);
+        pthread_mutex_unlock(args->lock);
 
         // printf("<%d> %d, {", args->tid, task->current);
         // int i;
@@ -107,11 +120,22 @@ int pcv(int root, int current, int order, circularArray* ca, linkedList* path,
 {
     int nQuo, nRem;
     int beg, end;
-    int cost;
+    pthread_mutex_t lock;
+    int cost = INT_MAX;
+    int choosen = -1;
+    void* choosenPath;
     int i, j, k, idx;
     task_t* task;
     pthread_t* thread;
     threadArgs* tArgs;
+
+    // int a = 1;
+    // printf("<PID %d ready to attach>\n", getpid());
+    // while(a){
+    // }
+
+    //pthread_init();
+    pthread_mutex_init(&lock, NULL);
 
     //Create array of threads
     thread = (pthread_t*) malloc(numThreads*sizeof(pthread_t));
@@ -127,7 +151,10 @@ int pcv(int root, int current, int order, circularArray* ca, linkedList* path,
     k = 0;
     for(i = 0; i < numThreads; i++) {
         tArgs[i].tid = i;
-
+        tArgs[i].cost = &cost;
+        tArgs[i].choosen = &choosen;
+        tArgs[i].root = root;
+        tArgs[i].lock = &lock;
         //Sets start point
         beg = idx;
 
@@ -143,10 +170,12 @@ int pcv(int root, int current, int order, circularArray* ca, linkedList* path,
 
         tArgs[i].tasklist = NULL;
         for(j = beg; j <= end; j++) {
+            //printf("<%d><%d, %d>\n", getpid(), beg, end);
             task = (task_t*) malloc(sizeof(task_t));
 
             task->ca = (circularArray*) malloc(sizeof(circularArray));
             circularArrayNew(ca->N-1, task->ca);
+
             ca->index = k;
             task->current = circularArrayReplicate(ca, task->ca);
             k++;
@@ -161,8 +190,15 @@ int pcv(int root, int current, int order, circularArray* ca, linkedList* path,
 
     /* Join threads */
     for (i = 0; i < numThreads; i++) {
-        pthread_join(thread[i], NULL);
+        pthread_join(thread[i], &choosenPath);
+        if (choosen == i) {
+            linkedListPush(curret, path);
+            linkedListCat(path, (linkedList*) choosenPath));
+        } else {
+            linkedListDel((linkedList*) choosenPath);
+        }
     }
+    cost += getCost(current, path->first->elem);
 
     free(thread);
     free(tArgs);
@@ -195,6 +231,8 @@ int main(int argc, char **argv) {
     MPI_Comm_size(MPI_COMM_WORLD, &numProc);
 
     MPI_Comm_get_parent(&interComm);
+
+    printf("<Slave (%d) PID %d>\n", myRank, getpid());
 
     if (myRank == 0) {
         MPI_Recv(&root, 1, MPI_INT, 0, tag, interComm, &status);
