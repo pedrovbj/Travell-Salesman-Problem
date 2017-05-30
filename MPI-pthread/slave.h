@@ -40,9 +40,10 @@ typedef struct {
     int root;
     int* cost; /* Variavel compartilhada */
     int* choosen; /* Variavel compartilhada */
+    int currentOfSlave;
     pthread_mutex_t* lock;
     task_t* tasklist;
-    void* pathCandidate;
+    linkedList* pathCandidate;
 } threadArgs;
 
 /* Problema do caxeiro viajante sequencial */

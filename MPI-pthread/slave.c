@@ -18,6 +18,7 @@
 
 /* Adj matrix */
 int** g;
+int order;
 
 /* Just because the specification says the use of conditional variables is
    a __must__ */
@@ -26,52 +27,53 @@ pthread_mutex_t mutex;
 pthread_cond_t cond;
 
 int pcv_seq(int root, int current, circularArray* ca, linkedList* path) {
-    int i;
-    int cc;
-    int cost = INT_MAX, costCandidate = 0;
-    circularArray* copies; /* copias da lista circular para cada filho */
-    linkedList* paths; /* caminhos de cada filho */
-    int choosen = -1; /* filho escolhido */
+    int i, j;
+    int cost = INT_MAX;
+    int costCandidate;
+    circularArray* cj;
+    linkedList* pathj;
+    int choosen = -1;
 
     /* Caso base */
     if(ca->N == 1) {
-        cost = getCost(current, ca->array[0], g);
-        updateCost(&cost, getCost(ca->array[0], root, g));
         linkedListPush(root, path);
         linkedListPush(ca->array[0], path);
         linkedListPush(current, path);
-        return cost;
+        return getCost(current, ca->array[0], g) + getCost(ca->array[0], root, g);
     }
 
+    cj = (circularArray*) malloc(order*sizeof(circularArray));
+    pathj = (linkedList*) malloc(order*sizeof(linkedList));
     /* Caso geral */
-    copies = (circularArray*) malloc(ca->N*sizeof(circularArray));
-    paths = (linkedList*) malloc(ca->N*sizeof(linkedList));
-    /* Para cada filho na arvore de recursao, calcula seu custo e caminho */
     for (i = 0; i < ca->N; i++) {
-        linkedListNew(&paths[i]);
-        cc = circularArrayReplicate(ca, &copies[i]);
-        updateCost(&costCandidate, getCost(current, cc, g));
-        updateCost(&costCandidate, pcv_seq(root, cc, &copies[i], &paths[i]));
-        /* Atualiza custo minimo e caminho escolhido */
+        j = ca->array[i];
+        ca->index = i;
+        circularArrayReplicate(ca, &cj[j]);
+        linkedListNew(&pathj[j]);
+        costCandidate = getCost(current, j, g) + pcv_seq(root, j, &cj[j], &pathj[j]);
         if (costCandidate < cost) {
             cost = costCandidate;
-            choosen = i;
+            choosen = j;
         }
     }
 
     /* Concatena o caminho minimo da sub-arvore com o caminho total */
-    linkedListCat(path, &paths[choosen]);
+    linkedListCat(path, &pathj[choosen]);
     linkedListPush(current, path);
 
     /* Libera a memoria alocada */
     for (i = 0; i < ca->N; i++) {
-        linkedListDel(&paths[i]);
+        j = ca->array[i];
+        if (j != choosen)
+            linkedListDel(&pathj[j]);
     }
-    free(paths);
+    free(pathj);
     for (i = 0; i < ca->N; i++) {
-        circularArrayDel(&copies[i]);
+        j = ca->array[i];
+        circularArrayDel(&cj[j]);
     }
-    free(copies);
+    free(cj);
+
     return cost;
 }
 
@@ -90,7 +92,7 @@ void* pcv_thread(void* tArgs) {
         linkedListNew(&pathAux);
 
         /* pcv sequencial */
-        costCandidate = pcv_seq(args->root, task->current, task->ca, &pathAux);
+        costCandidate = getCost(args->currentOfSlave, task->current, g) + pcv_seq(args->root, task->current, task->ca, &pathAux);
 
         /* Atualiza o custo e qual o caminho escolhido */
         pthread_mutex_lock(args->lock);
@@ -165,6 +167,7 @@ int pcv(int root, int current, int order, circularArray* ca, linkedList* path,
         tArgs[i].choosen = &choosen;
         tArgs[i].root = root;
         tArgs[i].lock = &lock;
+        tArgs[i].currentOfSlave = current;
         tArgs[i].pathCandidate = (void*) malloc(sizeof(linkedList));
         linkedListNew((linkedList*)tArgs[i].pathCandidate);
 
@@ -217,9 +220,6 @@ int pcv(int root, int current, int order, circularArray* ca, linkedList* path,
         free(tArgs[i].pathCandidate);
     }
 
-    /* Atualiza custo */
-    updateCost(&cost, getCost(current, path->first->elem, g));
-
     /* Inclui no atual no caminho */
     linkedListPush(current, path);
 
@@ -238,7 +238,6 @@ int main(int argc, char **argv) {
     int beg, end;
     int numThreads;
     int current;
-    int order;
     int root;
     int i, j;
     node_t* node;
@@ -265,6 +264,11 @@ int main(int argc, char **argv) {
         /* Recebe linhas da matriz */
         for (i = 0; i < order; i++) {
             MPI_Recv(&g[i][0], order, MPI_INT, 0, tag++, interComm, &status);
+        }
+        for (i = 0; i < order; i++) {
+            for (j = 0; j < order; j++)
+                printf("%d ", g[i][j]);
+            puts("");
         }
     }
 

@@ -29,7 +29,7 @@ slave: $(OBJS)
 	mpicc -pthread -Wall $(OBJS_SLAVE) $(OBJS_TADS) -o slave
 
 $(OBJS):
-	mpicc -pthread -c -Wall $(SRCS)
+	mpicc -pthread -g -c -Wall $(SRCS)
 
 run:
 	mpirun -np 1 ./$(NAME) file.in

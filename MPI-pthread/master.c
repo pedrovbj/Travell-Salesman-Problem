@@ -63,6 +63,7 @@ int pcv(int root, int current, int** g, int order, linkedList* path,
             interComm, &status);
 
         /* buf[0] contem o custo e o restante do buf o caminho */
+        buf[0] += getCost(root, buf[1], g);
         if (buf[0] < cost) {
             /* Atualiza custo minimo */
             cost = buf[0];
@@ -75,7 +76,8 @@ int pcv(int root, int current, int** g, int order, linkedList* path,
 
     /* Acresce o custo de se ir do no raiz ate o primeiro no
        do caminho escolhido */
-    updateCost(&cost, getCost(root, pathArray[0], g));
+    //updateCost(&cost, getCost(root, pathArray[0], g));
+    //cost += getCost(root, pathArray[0], g);
 
     /* Insere os elementos com o caminho escolhido na lista encadeada
        de retorno */
