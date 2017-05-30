@@ -1,8 +1,25 @@
+/*
+ ********************************************************
+ * INSTITUTO DE CIENCIAS MATEMATICAS E DE COMPUTACAO DA *
+ * UNIVERSIDADE DE SAO PAULO (ICMC-USP)                 *
+ *                                                      *
+ * Avaliacao Bimestral AB1 (26/05 a 29/05 de 2017)      *
+ * Programacao Concorrente (SSC0742)                    *
+ *                                                      *
+ * Professor Paulo Sergio Lopes de Souza                *
+ *                                                      *
+ * Aluno Pedro Virgilio Basilio Jeronymo (8910559)      *
+ *                                                      *
+ ********************************************************
+ * Problema do Caixeiro Viajante                        *
+ ********************************************************
+ */
 #include "linkedList.h"
 
 void linkedListNew(linkedList* l) {
     l->first = NULL;
     l->last = NULL;
+    l->N = 0;
 }
 
 void linkedListDel(linkedList* l) {
@@ -21,6 +38,7 @@ void linkedListPush(int a, linkedList* l) {
     if (l->last == NULL) {
         l->last = node;
     }
+    l->N++;
 }
 
 int linkedListPop(linkedList* l) {
@@ -40,6 +58,7 @@ int linkedListPop(linkedList* l) {
     if(l->first == NULL) {
         l->last = NULL;
     }
+    l->N--;
 
     return a;
 }
@@ -55,8 +74,9 @@ void linkedListCat(linkedList* l1, linkedList* l2) {
         l1->first = l2->first;
     }
     l1->last = l2->last;
-    l2->first = NULL;
-    l2->last = NULL;
+    l1->N += l2->N;
+    /* This empties l2 */
+    linkedListNew(l2);
 }
 
 void linkedListPrint(linkedList* l) {

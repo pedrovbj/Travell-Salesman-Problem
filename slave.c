@@ -96,7 +96,8 @@ void* pcv_thread(void* tArgs) {
 
         /* pcv sequencial */
         costCandidate = getCost(args->currentOfSlave, task->current, g);
-        updateCost(&costCandidate, pcv_seq(args->root, task->current, task->ca, &pathAux));
+        updateCost(&costCandidate,
+            pcv_seq(args->root, task->current, task->ca, &pathAux));
 
         /* Atualiza o custo e qual o caminho escolhido */
         pthread_mutex_lock(args->lock);
