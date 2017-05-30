@@ -22,7 +22,7 @@ int getCost(int i, int j, int** g) {
 }
 
 void updateCost(int *cost, int inc) {
-    if (inc == INT_MAX) {
+    if ((inc == INT_MAX) || (*cost == INT_MAX)) {
         *cost = INT_MAX;
     } else {
         (*cost) += inc;

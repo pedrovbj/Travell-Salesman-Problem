@@ -39,7 +39,9 @@ int pcv_seq(int root, int current, circularArray* ca, linkedList* path) {
         linkedListPush(root, path);
         linkedListPush(ca->array[0], path);
         linkedListPush(current, path);
-        return getCost(current, ca->array[0], g) + getCost(ca->array[0], root, g);
+        cost = getCost(current, ca->array[0], g);
+        updateCost(&cost, getCost(ca->array[0], root, g));
+        return cost;
     }
 
     cj = (circularArray*) malloc(order*sizeof(circularArray));
@@ -50,7 +52,8 @@ int pcv_seq(int root, int current, circularArray* ca, linkedList* path) {
         ca->index = i;
         circularArrayReplicate(ca, &cj[j]);
         linkedListNew(&pathj[j]);
-        costCandidate = getCost(current, j, g) + pcv_seq(root, j, &cj[j], &pathj[j]);
+        costCandidate = getCost(current, j, g);
+        updateCost(&costCandidate, pcv_seq(root, j, &cj[j], &pathj[j]));
         if (costCandidate < cost) {
             cost = costCandidate;
             choosen = j;
@@ -92,7 +95,8 @@ void* pcv_thread(void* tArgs) {
         linkedListNew(&pathAux);
 
         /* pcv sequencial */
-        costCandidate = getCost(args->currentOfSlave, task->current, g) + pcv_seq(args->root, task->current, task->ca, &pathAux);
+        costCandidate = getCost(args->currentOfSlave, task->current, g);
+        updateCost(&costCandidate, pcv_seq(args->root, task->current, task->ca, &pathAux));
 
         /* Atualiza o custo e qual o caminho escolhido */
         pthread_mutex_lock(args->lock);
@@ -264,11 +268,6 @@ int main(int argc, char **argv) {
         /* Recebe linhas da matriz */
         for (i = 0; i < order; i++) {
             MPI_Recv(&g[i][0], order, MPI_INT, 0, tag++, interComm, &status);
-        }
-        for (i = 0; i < order; i++) {
-            for (j = 0; j < order; j++)
-                printf("%d ", g[i][j]);
-            puts("");
         }
     }
 
