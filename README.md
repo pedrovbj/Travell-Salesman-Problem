@@ -1,2 +1,2 @@
-# pcv
-Problema do Caxeiro Viajante (Avaliação Bimestral 1 de Programação Concorrente)
+# Travell Salesman Problem
+Bruteforce solution using MPI and Pthreads for my Parallel Computing Course at University of Sao Paulo (USP).
